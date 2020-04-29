@@ -1,0 +1,9 @@
+int findNumbers(int* nums, int numsSize){
+    int sum=0;
+    for(int i=0;i<numsSize;i++){
+        while(nums[i]>=100)
+            nums[i]=nums[i]/100;
+        if (nums[i]>=10) sum++;
+    }
+    return sum;
+}
