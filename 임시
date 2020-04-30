@@ -14,6 +14,10 @@ typedef struct list {//호선
 	struct node* tail; //종착역
 }list;
 
+typedef struct path {
+	struct route* head;
+}path;
+
 node* getnode(node** newnode) {//지하철 역을 생성해줌
 	(*newnode) = (node*)malloc(sizeof(node));//동적할당에서
 	(*newnode)->prev = (*newnode)->next = NULL; //prev,next를 NULL초기화
@@ -34,13 +38,13 @@ void add(list* line, char headortail[]) {//line 호선의 head나 tail에 역을
 	node* newnode = getnode(&newnode);// stop이 아니면 새노드 만들어서
 	strcpy(newnode->name, name);//역 이름 대입하고
 	newnode->time = rand() % 60 + 90;//역을 통과하기 위한 시간을 랜덤으로 할당해줌
-	if (strcmp(headortail, "tail") == 0) {//tail을 입력했으면
+	if (strcmp(headortail, "tail") == 0) {//tail을 입력했으면 tail앞부분에 newnode를 넣어줌
 		newnode->prev = line->tail->prev; //
 		newnode->next = line->tail;//
 		line->tail->prev->next = newnode;//
 		line->tail->prev = newnode;//
 	}
-	else {//head를 입력했으면
+	else {//head를 입력했으면 head뒷부분에 newnode를 넣어줌
 		newnode->prev = line->head; //
 		newnode->next = line->head->next;//
 		line->head->next->prev = newnode;//
@@ -62,48 +66,78 @@ node* search_station(list*line, char name[]) {//호선에 해당하는 역을 �
 	return NULL; //못찾았으면 NULL리턴해줌
 }
 
-int search_destination(list* line, char start[], char destination[]) {//같은호선에서 start부터 destination까지의 루트를 알려줌
-	node* p= search_station(line, start);//line호선에 start역이 있는지 확인
-	if (p == NULL) return 2;//없으면 반환
-	node* q = p; //위에서 리턴되지않았다면 p는 start위치에 있고, 따라서 q로 start에서 destination을 탐색
-	node* chase = p;//chase는 목적지를 찾았을떄, start에서 출발하는 노드포인터
-	int count = 0;//start에서 destination으로 도달하기 위한 정거장 개수
-	int time = 0;
-	for (;q != line->head;q = q->prev, count++) {//head쪽 종착역을 탐색
-		if (strcmp(destination, q->name) == 0) {//목적지가 탐색되면
-			for (int i = 0;i <= count;i++, time+=chase->time,chase = chase->prev)//출발지부터 목적지까지
-				printf("%s ", chase->name);//역 이름을 출력해줌
-			printf("\n%02d분 %02d초 소요되며 총 %d정거장 입니다\n", time/60, time%60, count);
+void addtotail(list* path, node* info) {
+	node* newnode = getnode(&newnode);//새노드 만들어서
+	newnode->time = info->time;//시간정보를 얻고
+	strcpy(newnode->name, info->name);//역이름을 얻어서 head뒤쪽에 newnode를 넣어줌
+	newnode->prev = path->tail->prev;//
+	newnode->next = path->tail;//
+	path->tail->prev->next = newnode;//
+	path->tail->prev = newnode;//
+
+
+}
+
+void copypath(list* original, list*copy) {
+	node* p = original->head->next;
+	for (;p->next != NULL;p = p->next) addtotail(copy, p);
+}
+
+
+
+
+int search_destination(list* line, char start[], char destination[],list* shortest) {//같은호선에서 start부터 destination까지의 루트를 알려줌
+
+	node* st = search_station(line, start);//line호선에 start역이 있는지 확인
+	if (st == NULL) return 2;//없으면 끝냄
+	node* ch = st;
+	node* se = st;
+	for (;ch->prev!=NULL;ch = ch->prev) {//head쪽 종착역을 탐색
+		if (strcmp(destination, ch->name) == 0) {//목적지가 탐색되면
+			for (;se != ch;se = se->prev) addtotail(shortest, se);
 			return 0;//끝냄
 		}
 	}
-	;//tail쪽 종착역을 탐색하기위해 초기화
-	for (count = 0, q = p ;q != line->tail;q = q->next, count++) {//tail쪽 종착역을 탐색
-		if (strcmp(destination, q->name) == 0) {//목적지가 탐색되면
-			for (int i = 0;i <= count;i++, time += chase->time, chase = chase->next)//출발지부터 목적지까지
-				printf("%s ", chase->name);//역 이름을 출력해줌
-			printf("\n%02d분 %02d초 소요되며 총 %d정거장 입니다\n", time / 60, time % 60, count);
+
+	for (se=ch=st;ch->next!=NULL;ch = ch->next) {//head쪽에 목적지가 없다면 tail쪽 종착역을 탐색
+		if (strcmp(destination, ch->name) == 0) {//목적지가 탐색되면
+			for (;se != ch;se = se->next)  addtotail(shortest, se);
 			return 0;//끝냄
 		}
 	}
 	return 3;
 }
-void shortestpath(list* lines, char start[], char destination[], char** interchange) {//출발지에서 목적지까지 도달하는 것
+void shortestpath(list* lines, char start[], char destination[], list* interchange, list* shortest) {//출발지에서 목적지까지 도달하는 것
+	int stack = 0;
+	for (int i = 1;i <= maxline;i++) {
+		list* x = (list*)malloc(sizeof(list)); init(x); copypath(shortest, x);
+		if (search_destination(lines + i, start, destination, x) == 0) {
+			node* p = getnode(&p);
+			int time = 0, count = 0;
+			p = x->head->next;
+			while (p->next!=NULL) { printf("%s ", p->name); time += p->time;count++;p = p->next; }
+			printf("%s\n총 %2d 정거장이며 %2d분 %2d초가 소요됩니다.", destination,count, time / 60, time & 60);
+			printf("\n---------------------------------------\n");
+			stack = 1;
+		}
+		free(x);
+	}
+	if (stack == 1) return;
+	for (int i = 1;i <= maxline;i++) {
+		node* search = interchange->head->next;
+		for (;search->next!=NULL;search=search->next) {//모든 환승역에 대하여
+			if (strcmp(search->name, "donotvisit") == 0) continue;//방문하지 않을 환승역은 제외하고
+			list* x = (list*)malloc(sizeof(list)); init(x); copypath(shortest, x);
 
-	int stack = 0;//목적지에 도달했는지 알려주는 기능
-	for (int i = 1;i <= maxline;i++) //모든 호선에 대하여
-		if (search_destination(lines+i, start, destination) == 0) stack=1; //목적지에 도달했다면 stack이 on 상태
-	if (stack == 1 || strcmp(start,destination)==0) { printf("------------------------------------\n");return;}//목적지에 도달했으니 함수가 종료됨
-
-	for (int i = 1;i <= maxline;i++){//모든 노선에 대하여
-		for (int j=0;j<(int)_msize(interchange)/(int)sizeof(char);j++)//모든 환승역에 대하여
-			if (search_destination(lines + i, start,*(interchange +j)) == 0) {//출발역에서 환승역으로 이동시켰다면
+			if (search_destination(lines + i, start, search->name, x) == 0) {//출발역에서 환승역으로 이동시켰다면
 				char newstart[21];//환승역 이름을
-				strcpy(newstart, *(interchange + j));//임시 저장하고
-				strcpy(*(interchange + j),"");//다음에는 해당 이름을 가진 환승역을 방문하지 않기로하며
-				shortestpath(lines, newstart, destination, interchange);//그 역으로 환승을 하고 다시 목적지를 재귀적으로 찾아본다.
-				strcpy(*(interchange + j), newstart);
+				strcpy(newstart, search->name);//임시 저장하고
+				strcpy(search->name, "donotvisit");//다음에는 해당 이름을 가진 환승역을 방문하지 않기로하며
+				shortestpath(lines, newstart, destination, interchange, x);//그 역으로 환승을 하고 다시 목적지를 재귀적으로 찾아본다.
+				strcpy(search->name, newstart);
 			}
+			free(x);
+		}
 	}
 }
 
@@ -115,7 +149,7 @@ int main() {
 	list* lines = (list*)malloc(sizeof(list) * (maxline + 1));//lines[0]은 환승역목록 / lines[1]~lines[9]는 호선으로 쓰기위해 lines[maxline+1]까지 동적할당
 	for (int i = 0;i <= maxline;i++) init(lines + i);//각 노선마다 head와 tail을 달아준다
 	while (1) {
-		printf("\n0. 역 추가\n1. 환승설정 \n2. 노선도 출력\n3.최단경로\n메뉴를 입력하세요 : ");
+		printf("\n0. 역 추가\n1. 환승설정 \n2. 노선도 출력\n3. 최단경로\n메뉴를 입력하세요 : ");
 		scanf("%d", &menu);//메뉴입력
 		switch (menu) { //menu값에 따라 switch-case
 		case 0: { //역추가
@@ -145,14 +179,23 @@ int main() {
 			char before[21], after[21];//before이 출발역 after가 도착역
 			scanf("%s %s", &before, &after);//역을 입력하면
 			printf("------------------------------------\n");
-			char** interchange = (char**)malloc(sizeof(char*));
-			node* p = (lines + 0)->head->next;
-			for (int i = 0;p!= (lines+0)->tail;i++, p = p->next) {
-				*(interchange + i) = (char*)malloc(sizeof(char) * 21);
-				strcpy(*(interchange + i), p->name);
-			}
-			shortestpath(lines, before, after, interchange);
+
+			list* interchange = (list*)malloc(sizeof(list));
+			init(interchange);
+			copypath(lines + 0,interchange);
+
+			list* shortest = (list*)malloc(sizeof(list));
+			init(shortest);
+
+			shortestpath(lines, before, after, interchange,shortest);
 			break;
+		}
+		case 4: {
+
+
+
+
+
 		}
 		}
 	}
